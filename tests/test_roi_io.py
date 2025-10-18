@@ -71,6 +71,7 @@ def test_load_roi_returns_zones(tmp_path):
     )
     zones = load_roi("video1", roi_file=str(config_path))
     assert zones[0]["name"] == "zone"
+    assert zones[0]["points"][0] == (1.0, 1.0)
 
 
 def test_save_roi_rejects_unknown_format(tmp_path):
@@ -90,3 +91,24 @@ def test_load_roi_gracefully_handles_non_list_zones(tmp_path):
     )
     zones = load_roi("clip", roi_file=str(config_path))
     assert zones == []
+
+
+def test_load_roi_discards_small_polygons(tmp_path):
+    config_path = tmp_path / "roi.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "videos": {
+                    "clip": {
+                        "zones": [
+                            {"name": "line", "points": [[0, 0], [1, 1]]},
+                            {"name": "valid", "points": [[0, 0], [1, 0], [0, 1]]},
+                        ]
+                    }
+                }
+            }
+        )
+    )
+    zones = load_roi("clip", roi_file=str(config_path))
+    assert len(zones) == 1
+    assert zones[0]["name"] == "valid"
