@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, List, Sequence, Tuple
+from typing import Callable, Deque, Iterable, List, Sequence, Tuple
 
 import cv2
 
@@ -25,6 +26,38 @@ def _centroid(points: Iterable[Point]) -> Point:
     return int(x_total / len(pts)), int(y_total / len(pts))
 
 
+@dataclass(slots=True)
+class ZoneDefinition:
+    """Captured polygon metadata ready for persistence and rendering."""
+
+    name: str
+    points: List[Point]
+    color: RGBColor
+
+    def as_payload(self) -> dict:
+        return {
+            "name": self.name,
+            "points": [(float(x), float(y)) for x, y in self.points],
+            "color": tuple(int(c) for c in self.color),
+        }
+
+
+class MessageBuffer:
+    """Ring buffer for UI messages."""
+
+    def __init__(self, capacity: int = 5) -> None:
+        self._messages: Deque[str] = deque(maxlen=capacity)
+
+    def push(self, message: str) -> None:
+        self._messages.append(message)
+
+    def entries(self) -> List[str]:
+        return list(self._messages)
+
+    def latest_first(self) -> List[str]:
+        return list(reversed(self._messages))
+
+
 class ROICreator:
     """Create polygonal ROIs using OpenCV preview windows."""
 
@@ -40,7 +73,7 @@ class ROICreator:
         self,
         input_path: Path | str,
         window_name: str = "Polyzone ROI Creator",
-        on_update: Callable[[List[dict]], None] | None = None,
+        on_update: Callable[[List[ZoneDefinition]], None] | None = None,
         export_format: str = "json",
     ) -> None:
         path = Path(input_path)
@@ -54,12 +87,13 @@ class ROICreator:
         self.base_image = self._load_source(path)
         self.height, self.width = self.base_image.shape[:2]
 
-        self.zones: List[dict] = []
+        self.zones: List[ZoneDefinition] = []
         self._current_points: List[Point] = []
         self._running = False
-
-        self._messages: deque[str] = deque(maxlen=4)
-        self._messages.append("Left-click: add | Right-click: undo | N: save | S: save+exit | Q/Esc: quit")
+        self._messages = MessageBuffer(capacity=6)
+        self._messages.push(
+            "Left-click: add | Right-click: undo | N: save | S: save+exit | Q/Esc: quit"
+        )
 
         self._naming_active = False
         self._typed_name: List[str] = []
@@ -70,16 +104,7 @@ class ROICreator:
     @property
     def zones_payload(self) -> List[dict]:
         """Return zones ready for serialization or persistence."""
-        payload: List[dict] = []
-        for zone in self.zones:
-            payload.append(
-                {
-                    "name": zone["name"],
-                    "points": [(float(x), float(y)) for x, y in zone["points"]],
-                    "color": tuple(zone["color"]),
-                }
-            )
-        return payload
+        return [zone.as_payload() for zone in self.zones]
 
     def _load_source(self, path: Path):
         if _is_image_path(path):
@@ -98,7 +123,7 @@ class ROICreator:
             raise RuntimeError("Failed to read first frame from video.")
         return frame
 
-    def start(self) -> List[dict]:
+    def start(self) -> List[ZoneDefinition]:
         """Run the ROI creation loop."""
         self._running = True
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
@@ -157,7 +182,7 @@ class ROICreator:
 
         # Draw stored zones with labels
         for zone in self.zones:
-            self._draw_polygon(frame, zone["points"], zone["color"], close=True)
+            self._draw_polygon(frame, zone.points, zone.color, close=True)
             self._draw_zone_label(frame, zone)
 
         # Draw active polygon (closing once we have three points)
@@ -195,14 +220,15 @@ class ROICreator:
         )
 
     def _render_messages(self, frame) -> None:
-        if not self._messages:
+        messages = self._messages.latest_first()
+        if not messages:
             return
 
-        block_height = 20 * len(self._messages) + 20
+        block_height = 20 * len(messages) + 20
         top = self.height - block_height
         cv2.rectangle(frame, (0, top), (self.width, self.height), (0, 0, 0), -1)
 
-        for idx, message in enumerate(reversed(self._messages)):
+        for idx, message in enumerate(messages):
             y = self.height - 10 - idx * 20
             cv2.putText(
                 frame,
@@ -215,10 +241,10 @@ class ROICreator:
                 cv2.LINE_AA,
             )
 
-    def _draw_zone_label(self, frame, zone: dict) -> None:
-        cx, cy = _centroid(zone["points"])
-        text = zone["name"]
-        bgr = self._as_bgr(zone["color"])
+    def _draw_zone_label(self, frame, zone: ZoneDefinition) -> None:
+        cx, cy = _centroid(zone.points)
+        text = zone.name
+        bgr = self._as_bgr(zone.color)
         cv2.putText(
             frame,
             text,
@@ -284,7 +310,7 @@ class ROICreator:
             name = f"zone-{len(self.zones) + 1}"
 
         color = self._palette_color(len(self.zones))
-        zone = {"name": name, "points": list(self._pending_zone_points), "color": color}
+        zone = ZoneDefinition(name=name, points=list(self._pending_zone_points), color=color)
         self.zones.append(zone)
 
         self._current_points.clear()
@@ -293,7 +319,7 @@ class ROICreator:
         self._typed_name = []
         self._name_dirty = False
 
-        self._log(f"Zone '{name}' saved with {len(zone['points'])} points.")
+        self._log(f"Zone '{name}' saved with {len(zone.points)} points.")
         self._notify_update()
 
         if self._exit_after_save:
@@ -353,4 +379,4 @@ class ROICreator:
 
     def _log(self, message: str) -> None:
         print(f"[polyzone] {message}")
-        self._messages.append(message)
+        self._messages.push(message)

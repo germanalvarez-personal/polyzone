@@ -98,3 +98,85 @@ def test_cli_zone_add_yolo_with_dimensions():
         export = payload["videos"]["sample"]["zones"][0]["export"]
         assert export["format"] == "yolo"
         assert export["data"][0] == 0
+
+
+def test_cli_zone_add_rejects_bad_points():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(app, ["init"])
+        result = runner.invoke(
+            app,
+            [
+                "zone",
+                "add",
+                "--video",
+                "sample.mp4",
+                "--name",
+                "front",
+                "--point",
+                "not-a-point",
+                "--point",
+                "1,1",
+                "--point",
+                "2,2",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "points must be supplied" in result.output
+
+
+def test_cli_zone_list_accepts_full_path_reference():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(app, ["init"])
+        runner.invoke(
+            app,
+            [
+                "zone",
+                "add",
+                "--video",
+                "sample.mp4",
+                "--name",
+                "front",
+                "--point",
+                "0,0",
+                "--point",
+                "10,0",
+                "--point",
+                "10,10",
+            ],
+        )
+        result = runner.invoke(app, ["zone", "list", "--video", "videos/sample.mp4"])
+        assert result.exit_code == 0
+        assert "sample" in result.output
+
+
+def test_cli_zone_list_requires_existing_config():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["zone", "list"])
+        assert result.exit_code != 0
+        assert "No ROI configuration found" in result.output
+
+
+def test_cli_zone_add_requires_minimum_points():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(app, ["init"])
+        result = runner.invoke(
+            app,
+            [
+                "zone",
+                "add",
+                "--video",
+                "sample.mp4",
+                "--name",
+                "front",
+                "--point",
+                "0,0",
+                "--point",
+                "10,0",
+            ],
+        )
+        assert result.exit_code != 0
+        assert "At least three points" in result.output

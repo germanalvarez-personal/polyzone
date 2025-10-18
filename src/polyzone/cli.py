@@ -164,6 +164,8 @@ def add(
     """Append a new polygon zone definition."""
     video_key = _normalize_video_key(video)
     parsed_points = [_parse_point(point) for point in points]
+    if len(parsed_points) < 3:
+        raise click.UsageError("At least three points are required to define a polygon")
     existing_zones = load_roi(video_key, roi_file=str(config_path))
     resolved_color = _resolve_color(color, len(existing_zones))
 

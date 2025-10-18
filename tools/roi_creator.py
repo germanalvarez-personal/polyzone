@@ -48,7 +48,7 @@ def main() -> None:
     for zone in zones:
         save_roi(
             video_stem=video_stem,
-            roi_entry={"name": zone["name"], "points": zone["points"], "color": zone["color"]},
+            roi_entry={"name": zone.name, "points": zone.points, "color": zone.color},
             output=str(args.output),
             export_format=args.format,
             image_size=image_size if args.format == "yolo" else None,

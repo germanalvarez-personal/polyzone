@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import List
 
 import numpy as np
+import pytest
 
-from ui.roi_creator import ROICreator
+from ui.roi_creator import ROICreator, ZoneDefinition
 
 
 class StubCV2:
@@ -74,8 +75,8 @@ def test_roi_creator_zone_flow(monkeypatch, tmp_path):
     creator._name_dirty = True
     creator._commit_pending_zone()
 
-    assert creator.zones[0]["name"] == "custom-zone"
-    assert creator.zones[0]["points"][-1] == (5, 6)
+    assert creator.zones[0].name == "custom-zone"
+    assert creator.zones[0].points[-1] == (5, 6)
     assert updates
 
     zones = creator.start()
@@ -117,5 +118,21 @@ def test_roi_creator_commit_exit_after_save(monkeypatch, tmp_path):
     creator._typed_name = []  # trigger default naming
     creator._commit_pending_zone()
 
-    assert creator.zones[0]["name"] == "zone-1"
+    assert creator.zones[0].name == "zone-1"
     assert not creator._running
+
+
+def test_zone_definition_payload_serialization():
+    zone = ZoneDefinition(name="demo", points=[(1, 2), (3, 4), (5, 6)], color=(10, 20, 30))
+    payload = zone.as_payload()
+    assert payload["name"] == "demo"
+    assert payload["points"][0][0] == 1.0
+    assert payload["color"] == (10, 20, 30)
+
+
+def test_zones_payload_export(monkeypatch, tmp_path):
+    creator, _ = _build_creator(monkeypatch, tmp_path)
+    creator.zones.append(ZoneDefinition(name="demo", points=[(0, 0), (1, 1), (2, 0)], color=(255, 0, 0)))
+    payload = creator.zones_payload
+    assert payload[0]["name"] == "demo"
+    assert pytest.approx(payload[0]["points"][1][0]) == 1.0

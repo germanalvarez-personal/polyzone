@@ -71,3 +71,22 @@ def test_load_roi_returns_zones(tmp_path):
     )
     zones = load_roi("video1", roi_file=str(config_path))
     assert zones[0]["name"] == "zone"
+
+
+def test_save_roi_rejects_unknown_format(tmp_path):
+    with pytest.raises(ValueError):
+        save_roi(
+            video_stem="foo",
+            roi_entry={"name": "invalid", "points": [(0, 0), (1, 1), (2, 0)]},
+            output=str(tmp_path / "roi.json"),
+            export_format="xml",
+        )
+
+
+def test_load_roi_gracefully_handles_non_list_zones(tmp_path):
+    config_path = tmp_path / "roi.json"
+    config_path.write_text(
+        json.dumps({"videos": {"clip": {"zones": {"name": "not-a-list"}}}})
+    )
+    zones = load_roi("clip", roi_file=str(config_path))
+    assert zones == []
