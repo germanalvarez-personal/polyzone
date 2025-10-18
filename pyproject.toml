@@ -8,12 +8,15 @@ readme = "README.md"
 packages = [
     { include = "polyzone", from = "src" },
     { include = "ui", from = "src" },
+    { include = "core", from = "src" },
+    { include = "tools" },
 ]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 click = "^8.1.7"
 opencv-python = "^4.10.0.84"
+shapely = "^2.0.6"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.2.0"
